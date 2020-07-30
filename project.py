@@ -5,7 +5,6 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split, KFold
-from sklearn.tree import DecisionTreeClassifier
 from math import sqrt
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
@@ -72,7 +71,8 @@ if __name__ == '__main__':
 
     # import data
     train_data = pd.read_csv('Data/train_finalv1_2.csv')
-    train_data = train_data.drop(axis=1, columns='ID', inplace=False)
+    train_data = train_data.T[1:].T
+    # print (train_data)
 
     X_data = train_data.drop(axis=1, columns='SalePrice', inplace=False).values
     Y_data = train_data['SalePrice'].values
