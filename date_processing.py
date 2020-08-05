@@ -1,183 +1,11 @@
-#!/usr/bin/python
-import numpy as np
-from sklearn.kernel_ridge import KernelRidge
-from sklearn.linear_model import Lasso, LinearRegression, ElasticNet
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import RobustScaler
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import KFold, train_test_split
-from math import sqrt
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-import time
-import pandas as pd
-import os
-from sklearn.preprocessing import LabelEncoder
-from itertools import product
-
-
-def stacking(model, x_train, y_train, x_test, k_fold, num_k_fold):
-    stk_train_data = np.zeros((x_train.shape[0],))
-    stk_test = np.zeros((x_test.shape[0],))
-    stk_test_kf = np.zeros((num_k_fold, x_test.shape[0]))
-    i = 0
-    for train_index, test_index in k_fold.split(x_train):
-        kf_x_train = x_train[train_index]
-        kf_y_train = y_train[train_index]
-        model = model.fit(kf_x_train, kf_y_train)
-        kf_x_test = x_train[test_index]
-        stk_train_data[test_index] = model.predict(kf_x_test)
-        stk_test_kf[i, :] = model.predict(x_test)
-        i += 1
-    stk_test[:] = stk_test_kf.mean(axis=0)
-    return stk_train_data, stk_test
-
-
-def stk_train(model, X_train, X_test, Y_train, kf, num_k_fold):
-    new_x_train = np.zeros((X_train.shape[0], len(model)))
-    new_x_test = np.zeros((X_test.shape[0], len(model)))
-    i = 0
-    for regression in model:
-        new_x_train[:, i], new_x_test[:, i] = stacking(
-            regression, X_train, Y_train, X_test, kf, num_k_fold)
-        i += 1
-    return new_x_train, new_x_test
-
-
-def model_data_preprocessing(train_data, valid_data, test_data):
-    # drop ID
-    train_data = train_data.T[1:].T
-    valid_data = valid_data.T[1:].T
-    # get the test_id
-    test_ID = list(range(0, test_data.shape[0]))
-    # drop ID
-    test_data = test_data.T[1:].T
-    X_final_test = test_data.drop(['item_monthly'], axis=1).values
-    # get the X data
-    X_train_data = train_data.drop(['item_monthly'], axis=1).values
-    X_valid_data = valid_data.drop(['item_monthly'], axis=1).values
-    # get the Y data
-    Y_train_data = train_data['item_monthly'].values.clip(0, 20)
-    Y_valid_data = valid_data['item_monthly'].values.clip(0, 20)
-    return test_ID, X_final_test, X_train_data, X_valid_data, Y_train_data, Y_valid_data
-
-
-def test_models_performance(all_model, X_train, Y_train, X_valid, Y_valid):
-    for i, regression in enumerate(all_model):
-        tc = time.time()
-        regression.fit(X_train, Y_train)
-        Y_pred = regression.predict(X_valid)
-        r_mse = sqrt(mean_squared_error(Y_valid, Y_pred))
-        if i == 0:
-            print(f'Lasso model\'s R_MSE :{r_mse:.4f}')
-        elif i == 1:
-            print(f'RandomForest model\'s R_MSE :{r_mse:.4f}')
-        elif i == 2:
-            print(f'XGBoost model\'s R_MSE :{r_mse:.4f}')
-        elif i == 3:
-            print(f'GradientBoosting model\'s R_MSE :{r_mse:.4f}')
-        elif i == 4:
-            print(f'LightGBM model\'s R_MSE :{r_mse:.4f}')
-        elif i == 5:
-            print(f'ENet model\'s R_MSE :{r_mse:.4f}')
-        elif i == 6:
-            print(f'KRR model\'s R_MSE :{r_mse:.4f}')
-        tc = time.time() - tc
-        print('time:', tc)
-
-
-def test_stacking_performance(new_x_train, Y_train, new_x_test, Y_valid):
-    tc = time.time()
-    stacking = LinearRegression()
-    stacking.fit(new_x_train, Y_train)
-    Y_reg_pred = stacking.predict(new_x_test)
-    r_mse = sqrt(mean_squared_error(Y_valid, Y_reg_pred))
-    print(f'stacking model\'s RMSE :{r_mse:.4f}')
-    tc = time.time() - tc
-    print('time:', tc)
-
-
-def creat_csv(test_ID, Y_final_pred):
-    result = pd.DataFrame()
-    result['ID'] = test_ID
-    result['item_monthly'] = Y_final_pred
-    # output to the current location
-    current_path = os.path.abspath(__file__)
-    location = (os.path.join(os.path.abspath(os.path.dirname(current_path) + os.path.sep + ".."), 'submission.csv'))
-    result.to_csv(location, index=False)
-
-
-def bulit_model_and_predict(data):
-    train_data = data[data.date_block_num < 33]
-    valid_data = data[data.date_block_num == 33]
-    test_data = data[data.date_block_num == 34]
-
-    # data processing before modeling
-    test_ID, X_final_test, X_train, X_valid, Y_train, Y_valid = model_data_preprocessing(train_data, valid_data,
-                                                                                         test_data)
-
-    # initialize k-fold
-    num_k_fold = 5
-    kf = KFold(n_splits=num_k_fold)
-
-    # initialize model
-    # lasso
-    # lasso = make_pipeline(RobustScaler(), Lasso(alpha=0.0005, random_state=100))
-    # RandomForest
-    # useless in this project
-    rf = RandomForestRegressor(n_estimators=10, criterion='mse',
-                               max_features='sqrt', min_samples_leaf=15,
-                               min_samples_split=10, max_depth=8)
-    # XGBoost
-    xgb = XGBRegressor(tree_method='hist', max_depth=8,
-                       n_estimators=10, min_child_weight=300,
-                       colsample_bytree=0.8, subsample=0.8,
-                       eta=0.3, seed=42)
-    # GradientBoosting
-    # gdt = GradientBoostingRegressor(n_estimators=10, learning_rate=0.005,
-    #                                 max_depth=8, max_features='sqrt',
-    #                                 min_samples_leaf=10, min_samples_split=10,
-    #                                 loss='huber', random_state=100)
-    # lightGBM
-    gbm = LGBMRegressor(objective='regression', num_leaves=8,
-                        learning_rate=0.005, n_estimators=10,
-                        max_bin=55, bagging_fraction=0.8,
-                        bagging_freq=5, feature_fraction=0.2319,
-                        feature_fraction_seed=9, bagging_seed=9,
-                        min_data_in_leaf=6, min_sum_hessian_in_leaf=11,
-                        max_depth=8)
-    # E_NET
-    # e_net = make_pipeline(RobustScaler(), ElasticNet(alpha=0.0005, l1_ratio=.9, random_state=3))
-    # KRR
-    # krr = KernelRidge(alpha=0.3, kernel='polynomial', degree=2, coef0=2.5)
-
-    # used for stacking basic models
-    # model = [xgb, gbm, krr]
-    model = [xgb, gbm]
-    # all model, for testing the score
-    # all_model = [lasso, rf, xgb, gdt, gbm, e_net, krr]
-    all_model = [gbm, xgb]
-
-    # fitting and check the R_MSE of each model
-    test_models_performance(all_model, X_train, Y_train, X_valid, Y_valid)
-
-    new_x_train, new_x_test = stk_train(model, X_train, X_valid, Y_train, kf, num_k_fold)
-
-    # check the R_MSE of ensemble learning
-    test_stacking_performance(new_x_train, Y_train, new_x_test, Y_valid)
-
-    # final predict
-    final_x_train, final_x_test = stk_train(model, X_train, X_final_test, Y_train, kf, num_k_fold)
-    ensemble = LinearRegression()
-    ensemble.fit(final_x_train, Y_train)
-    Y_final_pred = ensemble.predict(final_x_test)
-
-    # creat csv
-    creat_csv(test_ID, Y_final_pred)
-
+#!/usr/bin/env python
+# coding: utf-8
 
 def data_helper():
+    import pandas as pd
+    import numpy as np
+    from sklearn.preprocessing import LabelEncoder
+    from itertools import product
 
     print("data_processing begin")
     sales = pd.read_csv('sales_train.csv')
@@ -305,7 +133,7 @@ def data_helper():
         temp_data.columns = column_name
         temp_data.reset_index(inplace=True)
         data_frame = pd.merge(data_frame, temp_data, on=group_by_column, how='left')
-        data_frame = feature_helper(data_frame, lags, column_name)
+        data_frame = feature_helper(data_frame, lags, column_name).astype('float16')
         data_frame.drop(column_name, axis=1, inplace=True)
 
     # item_cnt_month
@@ -358,18 +186,3 @@ def data_helper():
     print("data_processing output begin")
     total_df.to_pickle('data.pkl')
     print("data_processing end")
-
-
-
-def main():
-    # data processing part
-    data_helper()
-
-    # model part
-    # when the data pre-processing is finished, change the following 2 rows
-    data = pd.read_pickle('data.pkl')
-    bulit_model_and_predict(data)
-
-
-if __name__ == '__main__':
-    main()
