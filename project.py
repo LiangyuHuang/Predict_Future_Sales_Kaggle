@@ -16,7 +16,6 @@ import os
 from sklearn.preprocessing import LabelEncoder
 from itertools import product
 
-
 def stacking(model, x_train, y_train, x_test, k_fold, num_k_fold):
     stk_train_data = np.zeros((x_train.shape[0],))
     stk_test = np.zeros((x_test.shape[0],))
@@ -33,7 +32,6 @@ def stacking(model, x_train, y_train, x_test, k_fold, num_k_fold):
     stk_test[:] = stk_test_kf.mean(axis=0)
     return stk_train_data, stk_test
 
-
 def stk_train(model, X_train, X_test, Y_train, kf, num_k_fold):
     new_x_train = np.zeros((X_train.shape[0], len(model)))
     new_x_test = np.zeros((X_test.shape[0], len(model)))
@@ -44,8 +42,7 @@ def stk_train(model, X_train, X_test, Y_train, kf, num_k_fold):
         i += 1
     return new_x_train, new_x_test
 
-
-def model_data_preprocessing(train_data, valid_data, test_data):
+def model_data_preprocessing(train_data,valid_data,test_data):
     # drop ID
     train_data = train_data.T[1:].T
     valid_data = valid_data.T[1:].T
@@ -58,13 +55,12 @@ def model_data_preprocessing(train_data, valid_data, test_data):
     X_train_data = train_data.drop(['item_monthly'], axis=1).values
     X_valid_data = valid_data.drop(['item_monthly'], axis=1).values
     # get the Y data
-    Y_train_data = train_data['item_monthly'].values.clip(0, 20)
-    Y_valid_data = valid_data['item_monthly'].values.clip(0, 20)
-    return test_ID, X_final_test, X_train_data, X_valid_data, Y_train_data, Y_valid_data
+    Y_train_data = train_data['item_monthly'].values.clip(0,20)
+    Y_valid_data = valid_data['item_monthly'].values.clip(0,20)
+    return test_ID,X_final_test,X_train_data,X_valid_data,Y_train_data,Y_valid_data
 
-
-def test_models_performance(all_model, X_train, Y_train, X_valid, Y_valid):
-    for i, regression in enumerate(all_model):
+def test_models_performance(all_model,X_train,Y_train,X_valid,Y_valid):
+    for i,regression in enumerate(all_model):
         tc = time.time()
         regression.fit(X_train, Y_train)
         Y_pred = regression.predict(X_valid)
@@ -86,8 +82,7 @@ def test_models_performance(all_model, X_train, Y_train, X_valid, Y_valid):
         tc = time.time() - tc
         print('time:', tc)
 
-
-def test_stacking_performance(new_x_train, Y_train, new_x_test, Y_valid):
+def test_stacking_performance(new_x_train,Y_train,new_x_test,Y_valid):
     tc = time.time()
     stacking = LinearRegression()
     stacking.fit(new_x_train, Y_train)
@@ -97,8 +92,7 @@ def test_stacking_performance(new_x_train, Y_train, new_x_test, Y_valid):
     tc = time.time() - tc
     print('time:', tc)
 
-
-def creat_csv(test_ID, Y_final_pred):
+def creat_csv(test_ID,Y_final_pred):
     result = pd.DataFrame()
     result['ID'] = test_ID
     result['item_monthly'] = Y_final_pred
@@ -107,15 +101,14 @@ def creat_csv(test_ID, Y_final_pred):
     location = (os.path.join(os.path.abspath(os.path.dirname(current_path) + os.path.sep + ".."), 'submission.csv'))
     result.to_csv(location, index=False)
 
-
 def bulit_model_and_predict(data):
+
     train_data = data[data.date_block_num < 33]
     valid_data = data[data.date_block_num == 33]
     test_data = data[data.date_block_num == 34]
 
     # data processing before modeling
-    test_ID, X_final_test, X_train, X_valid, Y_train, Y_valid = model_data_preprocessing(train_data, valid_data,
-                                                                                         test_data)
+    test_ID, X_final_test, X_train, X_valid, Y_train, Y_valid = model_data_preprocessing(train_data,valid_data,test_data)
 
     # initialize k-fold
     num_k_fold = 5
@@ -174,8 +167,7 @@ def bulit_model_and_predict(data):
     Y_final_pred = ensemble.predict(final_x_test)
 
     # creat csv
-    creat_csv(test_ID, Y_final_pred)
-
+    creat_csv(test_ID,Y_final_pred)
 
 def data_helper():
 
@@ -265,7 +257,7 @@ def data_helper():
     total_df = []
     for i in range(34):
         df = sales[sales.date_block_num == i]
-        total_df.append(np.array(list(product([i], df.shop_id.unique(), df.item_id.unique())), dtype='int8'))
+        total_df.append(np.array(list(product([i], df.shop_id.unique(), df.item_id.unique())), dtype='int16'))
 
     total_df = pd.DataFrame(np.vstack(total_df), columns=['date_block_num', 'shop_id', 'item_id'])
     total_df.sort_values(['date_block_num', 'shop_id', 'item_id'], inplace=True)
@@ -279,14 +271,14 @@ def data_helper():
     total_df = pd.merge(total_df, shops, on=['shop_id'], how='left')
     total_df = pd.merge(total_df, items, on=['item_id'], how='left')
     total_df.fillna(0, inplace=True)
-    total_df = total_df.astype('int8')
+    total_df = total_df.astype('int16')
 
     # # Create Lag Features and Mean-Encodings
     temp = sales.groupby(by=['shop_id', 'item_id', 'date_block_num']).agg(item_monthly=('item_cnt_day', sum))
     temp.columns = ['item_monthly']
     temp.reset_index(inplace=True)
     total_df = pd.merge(total_df, temp, on=['date_block_num', 'shop_id', 'item_id'], how='left')
-    total_df['item_monthly'] = total_df['item_monthly'].fillna(0).clip(0, 20).astype('float16')
+    total_df['item_monthly'] = total_df['item_monthly'].fillna(0).clip(0, 20).astype('float32')
 
     # Define functions
     def feature_helper(data_frame, lags, cols):
@@ -296,7 +288,7 @@ def data_helper():
                 tmp = tmp.copy()
                 tmp.columns = ["date_block_num", "shop_id", "item_id", col + "_mean_"+str(i)]
                 tmp.date_block_num = tmp.date_block_num + i
-                tmp = tmp.astype('float16')
+                tmp = tmp.astype('float32')
                 data_frame = pd.merge(data_frame, tmp, on=['date_block_num', 'shop_id', 'item_id'], how='left')
         return data_frame
 
@@ -345,13 +337,15 @@ def data_helper():
     # days, month, and year features
     total_df['month'] = total_df['date_block_num'] % 12
     days = pd.Series([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
-    total_df['days'] = total_df['month'].map(days).astype('int8')
-    total_df['years'] = total_df['date_block_num'].map(lambda x: scope(x)).astype('int8')
-    total_df['month'] = (total_df['month'] + 1).astype('int8')  # fix month
+    total_df['days'] = total_df['month'].map(days).astype('int16')
+    total_df['years'] = total_df['date_block_num'].map(lambda x: scope(x)).astype('int16')
+    total_df['month'] = (total_df['month'] + 1).astype('int16')  # fix month
 
     # The first month when one item is on sale
-    total_df['item_shop_sale_once'] = total_df['date_block_num'] - total_df.groupby(['item_id', 'shop_id'])['date_block_num'].transform('min')
-    total_df['item_sale_once'] = total_df['date_block_num'] - total_df.groupby('item_id')['date_block_num'].transform('min')
+    item_shop_df = total_df.groupby(['item_id', 'shop_id'])['date_block_num'].transform('min')
+    item_df = total_df.groupby('item_id')['date_block_num'].transform('min')
+    total_df['item_shop_sale_once'] = total_df['date_block_num'] - item_shop_df
+    total_df['item_sale_once'] = total_df['date_block_num'] - item_df
     total_df = total_df[total_df["date_block_num"] > 3].fillna(0)
 
     print(total_df.info())
@@ -359,17 +353,17 @@ def data_helper():
     total_df.to_pickle('data.pkl')
     print("data_processing end")
 
-
-
 def main():
     # data processing part
     data_helper()
 
     # model part
     # when the data pre-processing is finished, change the following 2 rows
+    # train_data = pd.read_csv('trainv4.csv').astype('int32')
+    # test_data = pd.read_csv('testv4.csv').astype('int32')
+    # valid_data = pd.read_csv('validationv4.csv').astype('int32')
     data = pd.read_pickle('data.pkl')
     bulit_model_and_predict(data)
-
 
 if __name__ == '__main__':
     main()

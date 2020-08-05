@@ -124,7 +124,7 @@ def data_helper():
                 tmp = tmp.copy()
                 tmp.columns = ["date_block_num", "shop_id", "item_id", col + "_mean_"+str(i)]
                 tmp.date_block_num = tmp.date_block_num + i
-                tmp = tmp.astype('float16')
+                tmp = tmp.astype('float32')
                 data_frame = pd.merge(data_frame, tmp, on=['date_block_num', 'shop_id', 'item_id'], how='left')
         return data_frame
 
