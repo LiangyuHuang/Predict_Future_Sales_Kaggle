@@ -422,12 +422,12 @@ def download_helper():
 
 def file_helper():
     print('Removing useless files')
-    os.remove('sales_train.csv')
+    # os.remove('sales_train.csv')
     os.remove('sample_submission.csv')
-    os.remove('items.csv')
+    # os.remove('items.csv')
     os.remove('item_categories.csv')
-    os.remove('shops.csv')
-    os.remove('test.csv')
+    # os.remove('shops.csv')
+    # os.remove('test.csv')
     print('Result is saved to csv file \'submission.csv\'')
     print('Thank you!')
 
